@@ -9,7 +9,7 @@ st.set_page_config(page_title="LoanBot", layout="centered")
 st.markdown("<h1 style='text-align: center;'>💬 LoanBot</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>Answer step-by-step like a WhatsApp chat 📱</p>", unsafe_allow_html=True)
 
-# Cache dataset loading and model training
+# Cache dataset loading and model training to avoid re-loading on each interaction
 @st.cache_resource
 def load_and_train_model():
     df = pd.read_csv("loan_data.csv")
@@ -37,7 +37,7 @@ def load_and_train_model():
 
     return model, encoders, target_encoder, X.columns
 
-# Initialize cached model
+# Load model and encoders, store them in session state
 if 'model' not in st.session_state:
     model, encoders, target_encoder, columns = load_and_train_model()
     st.session_state.model = model
@@ -68,7 +68,7 @@ for msg, is_user in st.session_state.history:
     </div>
     """, unsafe_allow_html=True)
 
-# Input step-by-step
+# Input step-by-step without delays
 if current_step < len(columns):
     col = columns[current_step]
     is_cat = col in encoders
@@ -82,18 +82,19 @@ if current_step < len(columns):
 
         submitted = st.form_submit_button("Send")
         if submitted:
+            # Collect user input and update session state
             st.session_state.answers[col] = user_input
             st.session_state.history.append((f"{user_input}", True))
             st.session_state.step += 1
 
+            # Provide next input prompt
             if st.session_state.step < len(columns):
                 next_col = columns[st.session_state.step]
                 st.session_state.history.append((f"Please enter your {next_col}:", False))
 
-    # Avoid unnecessary re-runs (no st.rerun() here)
-
-# All inputs collected, make prediction
-elif st.session_state.step == len(columns):
+    # Avoid any unnecessary re-runs or delays at this stage
+else:
+    # All inputs collected, make prediction
     input_data = []
     for col in columns:
         val = st.session_state.answers[col]
@@ -101,7 +102,7 @@ elif st.session_state.step == len(columns):
             val = encoders[col].transform([val])[0]
         input_data.append(val)
 
-    # Make the prediction without delays
+    # Run prediction immediately after inputs are collected
     pred = model.predict([input_data])[0]
     if target_encoder:
         pred = target_encoder.inverse_transform([pred])[0]
