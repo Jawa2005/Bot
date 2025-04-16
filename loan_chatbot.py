@@ -31,13 +31,15 @@ else:
 model = RandomForestClassifier()
 model.fit(X, y)
 
-# Session state
+# Setup session state
 if 'step' not in st.session_state:
     st.session_state.step = 0
 if 'answers' not in st.session_state:
     st.session_state.answers = {}
 if 'history' not in st.session_state:
     st.session_state.history = [("👋 Hello! I’m LoanBot. Let’s check your loan eligibility.", False)]
+    first_col = list(X.columns)[0]
+    st.session_state.history.append((f"Please enter your {first_col}:", False))
 
 # Layout
 st.set_page_config(page_title="LoanBot", layout="centered")
@@ -105,3 +107,5 @@ if st.button("🔁 Restart Chat"):
     st.session_state.step = 0
     st.session_state.answers = {}
     st.session_state.history = [("👋 Hello! I’m LoanBot. Let’s check your loan eligibility.", False)]
+    first_col = list(X.columns)[0]
+    st.session_state.history.append((f"Please enter your {first_col}:", False))
