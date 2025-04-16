@@ -1,75 +1,118 @@
-import pandas as pd
 import streamlit as st
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
+import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder
+import time
 
-# Load and process data
-df = pd.read_csv("loan_data.csv")
+# Page setup
+st.set_page_config(page_title="LoanBot", layout="centered")
+st.markdown("<h1 style='text-align: center;'>💬 LoanBot</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Answer step-by-step like a WhatsApp chat 📱</p>", unsafe_allow_html=True)
 
-# Fill missing values
-df.ffill(inplace=True)
+# Cache dataset loading and model training to avoid re-loading on each interaction
+@st.cache_resource
+def load_and_train_model():
+    df = pd.read_csv("loan_data.csv")
+    df.ffill(inplace=True)
 
-# Identify target column
-target_col = 'loan_status'  # <-- change if different
-X = df.drop(target_col, axis=1)
-y = df[target_col]
+    target_col = 'loan_status'
+    X = df.drop(target_col, axis=1)
+    y = df[target_col]
 
-# Encode categorical columns
-encoders = {}
-for col in X.select_dtypes(include='object').columns:
-    le = LabelEncoder()
-    X[col] = le.fit_transform(X[col])
-    encoders[col] = le
+    encoders = {}
+    for col in X.select_dtypes(include='object').columns:
+        le = LabelEncoder()
+        X[col] = le.fit_transform(X[col])
+        encoders[col] = le
 
-# Encode target if needed
-if y.dtype == 'object':
-    y_le = LabelEncoder()
-    y = y_le.fit_transform(y)
-    target_encoder = y_le
-else:
-    target_encoder = None
+    if y.dtype == 'object':
+        y_le = LabelEncoder()
+        y = y_le.fit_transform(y)
+        target_encoder = y_le
+    else:
+        target_encoder = None
 
-# Train/test split
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    model = RandomForestClassifier(n_jobs=-1)  # Enable parallel processing in RandomForest
+    model.fit(X, y)
 
-# Train model
-model = RandomForestClassifier()
-model.fit(X_train, y_train)
+    return model, encoders, target_encoder, X.columns
 
-# Streamlit app
-def loan_chatbot():
-    st.title("Loan Approval Prediction Bot")
+# Load model and encoders, store them in session state
+if 'model' not in st.session_state:
+    model, encoders, target_encoder, columns = load_and_train_model()
+    st.session_state.model = model
+    st.session_state.encoders = encoders
+    st.session_state.target_encoder = target_encoder
+    st.session_state.columns = columns
+    st.session_state.step = 0
+    st.session_state.answers = {}
+    st.session_state.history = [("👋 Hello! I’m LoanBot. Let’s check your loan eligibility.", False)]
 
-    st.write("Please provide the following details for the loan application:")
+# Get session state for easy reference
+model = st.session_state.model
+encoders = st.session_state.encoders
+target_encoder = st.session_state.target_encoder
+columns = st.session_state.columns
+current_step = st.session_state.step
 
-    user_input = []
+# Display chat history
+for msg, is_user in st.session_state.history:
+    bubble_color = "#dcf8c6" if is_user else "#f1f0f0"
+    align = "right" if is_user else "left"
+    st.markdown(f"""
+    <div style='text-align: {align}; margin: 10px 0;'>
+        <span style='background-color: {bubble_color}; padding: 10px 15px; border-radius: 20px;
+                     display: inline-block; max-width: 80%;'>
+            {msg}
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # Collect user input
-    for col in X.columns:
-        if col in encoders:
+# Input step-by-step without delays
+if current_step < len(columns):
+    col = columns[current_step]
+    is_cat = col in encoders
+
+    with st.form(key=f"form_{current_step}", clear_on_submit=True):
+        if is_cat:
             options = list(encoders[col].classes_)
-            val = st.selectbox(f"{col} (e.g., {', '.join(options)})", options)
-            encoded_val = encoders[col].transform([val])[0]
-            user_input.append(encoded_val)
+            user_input = st.selectbox(f"Your {col}:", options)
         else:
-            val = st.number_input(f"{col} (numeric):", format="%.2f")
-            user_input.append(val)
+            user_input = st.number_input(f"Enter {col}:", step=1.0)
 
-    # Submit button to process the input and make predictions
-    if st.button("Predict Loan Approval"):
-        # Make prediction
-        prediction = model.predict([user_input])[0]
+        submitted = st.form_submit_button("Send")
+        if submitted:
+            # Collect user input and update session state
+            st.session_state.answers[col] = user_input
+            st.session_state.history.append((f"{user_input}", True))
+            st.session_state.step += 1
 
-        # Decode prediction
-        if target_encoder:
-            prediction = target_encoder.inverse_transform([prediction])[0]
+            # Provide next input prompt
+            if st.session_state.step < len(columns):
+                next_col = columns[st.session_state.step]
+                st.session_state.history.append((f"Please enter your {next_col}:", False))
 
-        # Show result
-        if str(prediction).lower() in ['1', 'yes', 'approved', 'y']:
-            st.success("✅ Loan Approved")
-        else:
-            st.error("❌ Loan Not Approved")
+    # Avoid any unnecessary re-runs or delays at this stage
+else:
+    # All inputs collected, make prediction
+    input_data = []
+    for col in columns:
+        val = st.session_state.answers[col]
+        if col in encoders:
+            val = encoders[col].transform([val])[0]
+        input_data.append(val)
 
-if __name__ == "__main__":
-    loan_chatbot()
+    # Run prediction immediately after inputs are collected
+    pred = model.predict([input_data])[0]
+    if target_encoder:
+        pred = target_encoder.inverse_transform([pred])[0]
+
+    result = "✅ Loan Approved!" if str(pred).lower() in ['1', 'yes', 'approved', 'y'] else "❌ Loan Not Approved."
+    st.session_state.history.append((result, False))
+    st.session_state.step += 1  # Prevent re-running prediction
+
+# Restart option
+if st.button("🔁 Restart Chat"):
+    st.session_state.step = 0
+    st.session_state.answers = {}
+    st.session_state.history = [("👋 Hello! I’m LoanBot. Let’s check your loan eligibility.", False)]
