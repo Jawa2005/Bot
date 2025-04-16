@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
-import time
 
 # Page setup
 st.set_page_config(page_title="LoanBot", layout="centered")
@@ -80,4 +79,36 @@ if current_step < len(columns):
 
     with st.form(key=f"form_{current_step}", clear_on_submit=True):
         if is_cat:
-            options = list
+            options = list(encoders[col].classes_)
+            user_input = st.selectbox(f"Your {col}:", options)
+        else:
+            user_input = st.number_input(f"Enter {col}:", step=1.0)
+
+        submitted = st.form_submit_button("Send")
+        if submitted:
+            # Collect user input and update session state
+            st.session_state.answers[col] = user_input
+            st.session_state.history.append((f"{user_input}", True))
+            st.session_state.step += 1
+
+            # Provide next input prompt
+            if st.session_state.step < len(columns):
+                next_col = columns[st.session_state.step]
+                st.session_state.history.append((f"Please enter your {next_col}:", False))
+
+# All inputs collected, make prediction
+else:
+    input_data = []
+    for col in columns:
+        val = st.session_state.answers[col]
+        if col in encoders:
+            val = encoders[col].transform([val])[0]
+        input_data.append(val)
+
+    # Run prediction immediately after inputs are collected
+    pred = model.predict([input_data])[0]
+    if target_encoder:
+        pred = target_encoder.inverse_transform([pred])[0]
+
+    result = "✅ Loan Approved!" if str(pred).lower() in ['1', 'yes', 'approved', 'y'] else "❌ Loan Not Approved."
+    st.session_state.history.append((result, False))
