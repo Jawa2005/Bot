@@ -2,21 +2,20 @@ import streamlit as st
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
-import time
 
-# Page setup
 st.set_page_config(page_title="LoanBot", layout="centered")
 st.markdown("<h1 style='text-align: center;'>💬 LoanBot</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>Answer step-by-step like a WhatsApp chat 📱</p>", unsafe_allow_html=True)
 
-# Cache dataset loading and model training to avoid re-loading on each interaction
 @st.cache_resource
 def load_and_train_model():
     df = pd.read_csv("loan_data.csv")
     df.ffill(inplace=True)
 
+    # Choose key columns only
+    selected_columns = ['loan_amount', 'income', 'employment_status', 'credit_score']
     target_col = 'loan_status'
-    X = df.drop(target_col, axis=1)
+    X = df[selected_columns]
     y = df[target_col]
 
     encoders = {}
@@ -32,12 +31,11 @@ def load_and_train_model():
     else:
         target_encoder = None
 
-    model = RandomForestClassifier(n_jobs=-1)  # Enable parallel processing in RandomForest
+    model = RandomForestClassifier(n_jobs=-1)
     model.fit(X, y)
+    return model, encoders, target_encoder, selected_columns
 
-    return model, encoders, target_encoder, X.columns
-
-# Load model and encoders, store them in session state
+# Load once and store
 if 'model' not in st.session_state:
     model, encoders, target_encoder, columns = load_and_train_model()
     st.session_state.model = model
@@ -46,16 +44,16 @@ if 'model' not in st.session_state:
     st.session_state.columns = columns
     st.session_state.step = 0
     st.session_state.answers = {}
+    st.session_state.predicted = False
     st.session_state.history = [("👋 Hello! I’m LoanBot. Let’s check your loan eligibility.", False)]
 
-# Get session state for easy reference
 model = st.session_state.model
 encoders = st.session_state.encoders
 target_encoder = st.session_state.target_encoder
 columns = st.session_state.columns
 current_step = st.session_state.step
 
-# Display chat history
+# Show chat
 for msg, is_user in st.session_state.history:
     bubble_color = "#dcf8c6" if is_user else "#f1f0f0"
     align = "right" if is_user else "left"
@@ -68,7 +66,7 @@ for msg, is_user in st.session_state.history:
     </div>
     """, unsafe_allow_html=True)
 
-# Input step-by-step without delays
+# Step-by-step input
 if current_step < len(columns):
     col = columns[current_step]
     is_cat = col in encoders
@@ -82,19 +80,16 @@ if current_step < len(columns):
 
         submitted = st.form_submit_button("Send")
         if submitted:
-            # Collect user input and update session state
             st.session_state.answers[col] = user_input
             st.session_state.history.append((f"{user_input}", True))
             st.session_state.step += 1
 
-            # Provide next input prompt
             if st.session_state.step < len(columns):
                 next_col = columns[st.session_state.step]
                 st.session_state.history.append((f"Please enter your {next_col}:", False))
 
-    # Avoid any unnecessary re-runs or delays at this stage
-else:
-    # All inputs collected, make prediction
+# Predict if done collecting
+elif not st.session_state.predicted:
     input_data = []
     for col in columns:
         val = st.session_state.answers[col]
@@ -102,17 +97,17 @@ else:
             val = encoders[col].transform([val])[0]
         input_data.append(val)
 
-    # Run prediction immediately after inputs are collected
     pred = model.predict([input_data])[0]
     if target_encoder:
         pred = target_encoder.inverse_transform([pred])[0]
 
     result = "✅ Loan Approved!" if str(pred).lower() in ['1', 'yes', 'approved', 'y'] else "❌ Loan Not Approved."
     st.session_state.history.append((result, False))
-    st.session_state.step += 1  # Prevent re-running prediction
+    st.session_state.predicted = True
 
 # Restart option
 if st.button("🔁 Restart Chat"):
     st.session_state.step = 0
     st.session_state.answers = {}
     st.session_state.history = [("👋 Hello! I’m LoanBot. Let’s check your loan eligibility.", False)]
+    st.session_state.predicted = False
