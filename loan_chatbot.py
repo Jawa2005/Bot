@@ -2,17 +2,23 @@ import streamlit as st
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
+import time
+
+# Page setup
+st.set_page_config(page_title="LoanBot", layout="centered")
+st.markdown("<h1 style='text-align: center;'>💬 LoanBot</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Answer step-by-step like a WhatsApp chat 📱</p>", unsafe_allow_html=True)
 
 # Load dataset
 df = pd.read_csv("loan_data.csv")
 df.ffill(inplace=True)
 
-# Setup
+# Setup target and features
 target_col = 'loan_status'
 X = df.drop(target_col, axis=1)
 y = df[target_col]
 
-# Encode categorical features
+# Encode features
 encoders = {}
 for col in X.select_dtypes(include='object').columns:
     le = LabelEncoder()
@@ -31,21 +37,15 @@ else:
 model = RandomForestClassifier()
 model.fit(X, y)
 
-# Setup session state
+# Session state setup
 if 'step' not in st.session_state:
     st.session_state.step = 0
 if 'answers' not in st.session_state:
     st.session_state.answers = {}
 if 'history' not in st.session_state:
     st.session_state.history = [("👋 Hello! I’m LoanBot. Let’s check your loan eligibility.", False)]
-    first_col = list(X.columns)[0]
-    st.session_state.history.append((f"Please enter your {first_col}:", False))
 
-# Layout
-st.set_page_config(page_title="LoanBot", layout="centered")
-st.markdown("<h1 style='text-align: center;'>💬 LoanBot</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Answer step-by-step like a WhatsApp chat 📱</p>", unsafe_allow_html=True)
-
+# Get list of features
 columns = list(X.columns)
 current_step = st.session_state.step
 
@@ -62,7 +62,7 @@ for msg, is_user in st.session_state.history:
     </div>
     """, unsafe_allow_html=True)
 
-# Ask next question (inside form)
+# Input step-by-step
 if current_step < len(columns):
     col = columns[current_step]
     is_cat = col in encoders
@@ -83,10 +83,10 @@ if current_step < len(columns):
             if st.session_state.step < len(columns):
                 next_col = columns[st.session_state.step]
                 st.session_state.history.append((f"Please enter your {next_col}:", False))
+            st.experimental_rerun()
 
-            st.experimental_rerun()  # rerun to refresh chat smoothly
-else:
-    # All answers collected, make prediction
+# All inputs collected
+elif st.session_state.step == len(columns):
     input_data = []
     for col in columns:
         val = st.session_state.answers[col]
@@ -94,20 +94,32 @@ else:
             val = encoders[col].transform([val])[0]
         input_data.append(val)
 
+    # Simulate typing
+    placeholder = st.empty()
+    with placeholder:
+        st.markdown("""
+        <div style='text-align: left; margin: 10px 0;'>
+            <span style='background-color: #f1f0f0; padding: 10px 15px; border-radius: 20px;
+                         display: inline-block; max-width: 80%;'>
+                🤖 Typing...
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+        time.sleep(1.5)
+
     pred = model.predict([input_data])[0]
     if target_encoder:
         pred = target_encoder.inverse_transform([pred])[0]
 
     result = "✅ Loan Approved!" if str(pred).lower() in ['1', 'yes', 'approved', 'y'] else "❌ Loan Not Approved."
     st.session_state.history.append((result, False))
-    st.session_state.step += 1  # prevent re-prediction
+    st.session_state.step += 1  # Prevent re-running prediction
+    placeholder.empty()
     st.experimental_rerun()
 
-# Restart button
+# Restart
 if st.button("🔁 Restart Chat"):
     st.session_state.step = 0
     st.session_state.answers = {}
     st.session_state.history = [("👋 Hello! I’m LoanBot. Let’s check your loan eligibility.", False)]
-    first_col = list(X.columns)[0]
-    st.session_state.history.append((f"Please enter your {first_col}:", False))
     st.experimental_rerun()
