@@ -83,7 +83,7 @@ if current_step < len(columns):
             if st.session_state.step < len(columns):
                 next_col = columns[st.session_state.step]
                 st.session_state.history.append((f"Please enter your {next_col}:", False))
-            st.experimental_rerun()
+            st.rerun()
 
 # All inputs collected
 elif st.session_state.step == len(columns):
@@ -115,11 +115,11 @@ elif st.session_state.step == len(columns):
     st.session_state.history.append((result, False))
     st.session_state.step += 1  # Prevent re-running prediction
     placeholder.empty()
-    st.experimental_rerun()
+    st.rerun()
 
 # Restart
 if st.button("🔁 Restart Chat"):
     st.session_state.step = 0
     st.session_state.answers = {}
     st.session_state.history = [("👋 Hello! I’m LoanBot. Let’s check your loan eligibility.", False)]
-    st.experimental_rerun()
+    st.rerun()
