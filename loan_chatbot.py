@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
+import time
 
 # Page setup
 st.set_page_config(page_title="LoanBot", layout="centered")
@@ -18,8 +19,12 @@ def load_and_train_model():
     X = df.drop(target_col, axis=1)
     y = df[target_col]
 
-    encoders = {}
+    # Optimize data types
     for col in X.select_dtypes(include='object').columns:
+        X[col] = X[col].astype('category')
+
+    encoders = {}
+    for col in X.select_dtypes(include='category').columns:
         le = LabelEncoder()
         X[col] = le.fit_transform(X[col])
         encoders[col] = le
@@ -31,7 +36,8 @@ def load_and_train_model():
     else:
         target_encoder = None
 
-    model = RandomForestClassifier(n_estimators=100, max_depth=10, n_jobs=-1)  # Reduced complexity
+    # Use a simpler model for faster predictions
+    model = RandomForestClassifier(n_estimators=50, max_depth=5, n_jobs=-1)  # Reduced complexity
     model.fit(X, y)
 
     return model, encoders, target_encoder, X.columns
@@ -74,14 +80,4 @@ if current_step < len(columns):
 
     with st.form(key=f"form_{current_step}", clear_on_submit=True):
         if is_cat:
-            options = list(encoders[col].classes_)
-            user_input = st.selectbox(f"Your {col}:", options)
-        else:
-            user_input = st.number_input(f"Enter {col}:", step=1.0)
-
-        submitted = st.form_submit_button("Send")
-        if submitted:
-            # Collect user input and update session state
-            st.session_state.answers[col] = user_input
-            st.session_state.history.append((f"{user_input}", True))
-           
+            options = list
