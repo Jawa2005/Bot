@@ -7,26 +7,24 @@ import time
 # Page setup
 st.set_page_config(page_title="LoanBot", layout="centered")
 st.markdown("<h1 style='text-align: center;'>💬 LoanBot</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Answer step-by-step like a WhatsApp chat 📱</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Answer step-by-step  chat 📱</p>", unsafe_allow_html=True)
 
-# Load dataset and train model only once
-if 'model' not in st.session_state:
+# Cache dataset loading and model training
+@st.cache_resource
+def load_and_train_model():
     df = pd.read_csv("loan_data.csv")
     df.ffill(inplace=True)
 
-    # Setup target and features
     target_col = 'loan_status'
     X = df.drop(target_col, axis=1)
     y = df[target_col]
 
-    # Encode features
     encoders = {}
     for col in X.select_dtypes(include='object').columns:
         le = LabelEncoder()
         X[col] = le.fit_transform(X[col])
         encoders[col] = le
 
-    # Encode target
     if y.dtype == 'object':
         y_le = LabelEncoder()
         y = y_le.fit_transform(y)
@@ -34,15 +32,18 @@ if 'model' not in st.session_state:
     else:
         target_encoder = None
 
-    # Train model
-    model = RandomForestClassifier()
+    model = RandomForestClassifier(n_jobs=-1)  # Enable parallel processing in RandomForest
     model.fit(X, y)
-    
-    # Store the model and encoders in session state
+
+    return model, encoders, target_encoder, X.columns
+
+# Initialize cached model
+if 'model' not in st.session_state:
+    model, encoders, target_encoder, columns = load_and_train_model()
     st.session_state.model = model
     st.session_state.encoders = encoders
     st.session_state.target_encoder = target_encoder
-    st.session_state.X_columns = list(X.columns)
+    st.session_state.columns = columns
     st.session_state.step = 0
     st.session_state.answers = {}
     st.session_state.history = [("👋 Hello! I’m LoanBot. Let’s check your loan eligibility.", False)]
@@ -51,7 +52,7 @@ if 'model' not in st.session_state:
 model = st.session_state.model
 encoders = st.session_state.encoders
 target_encoder = st.session_state.target_encoder
-columns = st.session_state.X_columns
+columns = st.session_state.columns
 current_step = st.session_state.step
 
 # Display chat history
@@ -89,7 +90,7 @@ if current_step < len(columns):
                 next_col = columns[st.session_state.step]
                 st.session_state.history.append((f"Please enter your {next_col}:", False))
 
-    # Prevent unnecessary re-runs (no st.rerun() here)
+    # Avoid unnecessary re-runs (no st.rerun() here)
 
 # All inputs collected, make prediction
 elif st.session_state.step == len(columns):
@@ -100,20 +101,7 @@ elif st.session_state.step == len(columns):
             val = encoders[col].transform([val])[0]
         input_data.append(val)
 
-    # Simulate typing with minimal delay
-    placeholder = st.empty()
-    with placeholder:
-        st.markdown("""
-        <div style='text-align: left; margin: 10px 0;'>
-            <span style='background-color: #f1f0f0; padding: 10px 15px; border-radius: 20px;
-                         display: inline-block; max-width: 80%;'>
-                🤖 Typing...
-            </span>
-        </div>
-        """, unsafe_allow_html=True)
-        time.sleep(1)  # Shorten sleep time to make the bot more responsive
-
-    # Make the prediction
+    # Make the prediction without delays
     pred = model.predict([input_data])[0]
     if target_encoder:
         pred = target_encoder.inverse_transform([pred])[0]
@@ -121,11 +109,9 @@ elif st.session_state.step == len(columns):
     result = "✅ Loan Approved!" if str(pred).lower() in ['1', 'yes', 'approved', 'y'] else "❌ Loan Not Approved."
     st.session_state.history.append((result, False))
     st.session_state.step += 1  # Prevent re-running prediction
-    placeholder.empty()
 
 # Restart option
 if st.button("🔁 Restart Chat"):
     st.session_state.step = 0
     st.session_state.answers = {}
     st.session_state.history = [("👋 Hello! I’m LoanBot. Let’s check your loan eligibility.", False)]
-    # Avoid rerun here as it’s not necessary
