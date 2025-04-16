@@ -38,15 +38,14 @@ if 'model' not in st.session_state:
     model = RandomForestClassifier()
     model.fit(X, y)
     
+    # Store the model and encoders in session state
     st.session_state.model = model
     st.session_state.encoders = encoders
     st.session_state.target_encoder = target_encoder
-    st.session_state.df = df
     st.session_state.X_columns = list(X.columns)
     st.session_state.step = 0
     st.session_state.answers = {}
     st.session_state.history = [("👋 Hello! I’m LoanBot. Let’s check your loan eligibility.", False)]
-
 
 # Get session state for easy reference
 model = st.session_state.model
@@ -90,9 +89,7 @@ if current_step < len(columns):
                 next_col = columns[st.session_state.step]
                 st.session_state.history.append((f"Please enter your {next_col}:", False))
 
-    # Re-run the app only if needed, for example after the last step
-    if st.session_state.step >= len(columns):
-        st.experimental_rerun()
+    # Prevent unnecessary re-runs (no st.rerun() here)
 
 # All inputs collected, make prediction
 elif st.session_state.step == len(columns):
@@ -114,7 +111,7 @@ elif st.session_state.step == len(columns):
             </span>
         </div>
         """, unsafe_allow_html=True)
-        time.sleep(1)
+        time.sleep(1)  # Shorten sleep time to make the bot more responsive
 
     # Make the prediction
     pred = model.predict([input_data])[0]
@@ -131,4 +128,4 @@ if st.button("🔁 Restart Chat"):
     st.session_state.step = 0
     st.session_state.answers = {}
     st.session_state.history = [("👋 Hello! I’m LoanBot. Let’s check your loan eligibility.", False)]
-    st.experimental_rerun()
+    # Avoid rerun here as it’s not necessary
