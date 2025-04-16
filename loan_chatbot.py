@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
-import time
 
 # Page setup
 st.set_page_config(page_title="LoanBot", layout="centered")
@@ -10,7 +9,7 @@ st.markdown("<h1 style='text-align: center;'>💬 LoanBot</h1>", unsafe_allow_ht
 st.markdown("<p style='text-align: center;'>Answer step-by-step like a WhatsApp chat 📱</p>", unsafe_allow_html=True)
 
 # Cache dataset loading and model training to avoid re-loading on each interaction
-@st.cache_resource
+@st.cache_data
 def load_and_train_model():
     df = pd.read_csv("loan_data.csv")
     df.ffill(inplace=True)
@@ -32,7 +31,7 @@ def load_and_train_model():
     else:
         target_encoder = None
 
-    model = RandomForestClassifier(n_jobs=-1)  # Enable parallel processing in RandomForest
+    model = RandomForestClassifier(n_estimators=100, max_depth=10, n_jobs=-1)  # Reduced complexity
     model.fit(X, y)
 
     return model, encoders, target_encoder, X.columns
@@ -85,34 +84,4 @@ if current_step < len(columns):
             # Collect user input and update session state
             st.session_state.answers[col] = user_input
             st.session_state.history.append((f"{user_input}", True))
-            st.session_state.step += 1
-
-            # Provide next input prompt
-            if st.session_state.step < len(columns):
-                next_col = columns[st.session_state.step]
-                st.session_state.history.append((f"Please enter your {next_col}:", False))
-
-    # Avoid any unnecessary re-runs or delays at this stage
-else:
-    # All inputs collected, make prediction
-    input_data = []
-    for col in columns:
-        val = st.session_state.answers[col]
-        if col in encoders:
-            val = encoders[col].transform([val])[0]
-        input_data.append(val)
-
-    # Run prediction immediately after inputs are collected
-    pred = model.predict([input_data])[0]
-    if target_encoder:
-        pred = target_encoder.inverse_transform([pred])[0]
-
-    result = "✅ Loan Approved!" if str(pred).lower() in ['1', 'yes', 'approved', 'y'] else "❌ Loan Not Approved."
-    st.session_state.history.append((result, False))
-    st.session_state.step += 1  # Prevent re-running prediction
-
-# Restart option
-if st.button("🔁 Restart Chat"):
-    st.session_state.step = 0
-    st.session_state.answers = {}
-    st.session_state.history = [("👋 Hello! I’m LoanBot. Let’s check your loan eligibility.", False)]
+           
