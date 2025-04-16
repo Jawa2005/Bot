@@ -9,44 +9,50 @@ st.set_page_config(page_title="LoanBot", layout="centered")
 st.markdown("<h1 style='text-align: center;'>💬 LoanBot</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>Answer step-by-step like a WhatsApp chat 📱</p>", unsafe_allow_html=True)
 
-# Load dataset
-df = pd.read_csv("loan_data.csv")
-df.ffill(inplace=True)
+# Load dataset and train model only once
+if 'model' not in st.session_state:
+    df = pd.read_csv("loan_data.csv")
+    df.ffill(inplace=True)
 
-# Setup target and features
-target_col = 'loan_status'
-X = df.drop(target_col, axis=1)
-y = df[target_col]
+    # Setup target and features
+    target_col = 'loan_status'
+    X = df.drop(target_col, axis=1)
+    y = df[target_col]
 
-# Encode features
-encoders = {}
-for col in X.select_dtypes(include='object').columns:
-    le = LabelEncoder()
-    X[col] = le.fit_transform(X[col])
-    encoders[col] = le
+    # Encode features
+    encoders = {}
+    for col in X.select_dtypes(include='object').columns:
+        le = LabelEncoder()
+        X[col] = le.fit_transform(X[col])
+        encoders[col] = le
 
-# Encode target
-if y.dtype == 'object':
-    y_le = LabelEncoder()
-    y = y_le.fit_transform(y)
-    target_encoder = y_le
-else:
-    target_encoder = None
+    # Encode target
+    if y.dtype == 'object':
+        y_le = LabelEncoder()
+        y = y_le.fit_transform(y)
+        target_encoder = y_le
+    else:
+        target_encoder = None
 
-# Train model
-model = RandomForestClassifier()
-model.fit(X, y)
-
-# Session state setup
-if 'step' not in st.session_state:
+    # Train model
+    model = RandomForestClassifier()
+    model.fit(X, y)
+    
+    st.session_state.model = model
+    st.session_state.encoders = encoders
+    st.session_state.target_encoder = target_encoder
+    st.session_state.df = df
+    st.session_state.X_columns = list(X.columns)
     st.session_state.step = 0
-if 'answers' not in st.session_state:
     st.session_state.answers = {}
-if 'history' not in st.session_state:
     st.session_state.history = [("👋 Hello! I’m LoanBot. Let’s check your loan eligibility.", False)]
 
-# Get list of features
-columns = list(X.columns)
+
+# Get session state for easy reference
+model = st.session_state.model
+encoders = st.session_state.encoders
+target_encoder = st.session_state.target_encoder
+columns = st.session_state.X_columns
 current_step = st.session_state.step
 
 # Display chat history
@@ -83,9 +89,12 @@ if current_step < len(columns):
             if st.session_state.step < len(columns):
                 next_col = columns[st.session_state.step]
                 st.session_state.history.append((f"Please enter your {next_col}:", False))
-            st.rerun()
 
-# All inputs collected
+    # Re-run the app only if needed, for example after the last step
+    if st.session_state.step >= len(columns):
+        st.experimental_rerun()
+
+# All inputs collected, make prediction
 elif st.session_state.step == len(columns):
     input_data = []
     for col in columns:
@@ -94,7 +103,7 @@ elif st.session_state.step == len(columns):
             val = encoders[col].transform([val])[0]
         input_data.append(val)
 
-    # Simulate typing
+    # Simulate typing with minimal delay
     placeholder = st.empty()
     with placeholder:
         st.markdown("""
@@ -105,8 +114,9 @@ elif st.session_state.step == len(columns):
             </span>
         </div>
         """, unsafe_allow_html=True)
-        time.sleep(1.5)
+        time.sleep(1)
 
+    # Make the prediction
     pred = model.predict([input_data])[0]
     if target_encoder:
         pred = target_encoder.inverse_transform([pred])[0]
@@ -115,11 +125,10 @@ elif st.session_state.step == len(columns):
     st.session_state.history.append((result, False))
     st.session_state.step += 1  # Prevent re-running prediction
     placeholder.empty()
-    st.rerun()
 
-# Restart
+# Restart option
 if st.button("🔁 Restart Chat"):
     st.session_state.step = 0
     st.session_state.answers = {}
     st.session_state.history = [("👋 Hello! I’m LoanBot. Let’s check your loan eligibility.", False)]
-    st.rerun()
+    st.experimental_rerun()
