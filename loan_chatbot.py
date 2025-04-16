@@ -7,7 +7,7 @@ import time
 # Page setup
 st.set_page_config(page_title="LoanBot", layout="centered")
 st.markdown("<h1 style='text-align: center;'>💬 LoanBot</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Answer step-by-step  chat 📱</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Answer step-by-step like a WhatsApp chat 📱</p>", unsafe_allow_html=True)
 
 # Cache dataset loading and model training
 @st.cache_resource
