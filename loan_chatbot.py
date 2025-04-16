@@ -62,12 +62,12 @@ for msg, is_user in st.session_state.history:
     </div>
     """, unsafe_allow_html=True)
 
-# Ask next question
+# Ask next question (inside form)
 if current_step < len(columns):
     col = columns[current_step]
     is_cat = col in encoders
 
-    with st.form(key=f"form_{current_step}"):
+    with st.form(key=f"form_{current_step}", clear_on_submit=True):
         if is_cat:
             options = list(encoders[col].classes_)
             user_input = st.selectbox(f"Your {col}:", options)
@@ -76,15 +76,15 @@ if current_step < len(columns):
 
         submitted = st.form_submit_button("Send")
         if submitted:
-            # Store response
             st.session_state.answers[col] = user_input
             st.session_state.history.append((f"{user_input}", True))
             st.session_state.step += 1
 
-            # Ask next question
             if st.session_state.step < len(columns):
                 next_col = columns[st.session_state.step]
                 st.session_state.history.append((f"Please enter your {next_col}:", False))
+
+            st.experimental_rerun()  # rerun to refresh chat smoothly
 else:
     # All answers collected, make prediction
     input_data = []
@@ -101,11 +101,13 @@ else:
     result = "✅ Loan Approved!" if str(pred).lower() in ['1', 'yes', 'approved', 'y'] else "❌ Loan Not Approved."
     st.session_state.history.append((result, False))
     st.session_state.step += 1  # prevent re-prediction
+    st.experimental_rerun()
 
-# Restart option
+# Restart button
 if st.button("🔁 Restart Chat"):
     st.session_state.step = 0
     st.session_state.answers = {}
     st.session_state.history = [("👋 Hello! I’m LoanBot. Let’s check your loan eligibility.", False)]
     first_col = list(X.columns)[0]
     st.session_state.history.append((f"Please enter your {first_col}:", False))
+    st.experimental_rerun()
